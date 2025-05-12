@@ -64,7 +64,7 @@ async function handleStandardTranslation() {
                 
                 // Translate the texts using selected API
                 document.getElementById('status-message').textContent = 
-                    `Файл ${i+1}/${files.length}: Перевод текста...`;
+                    `Обработка файлов (${i+1}/${files.length})...`;
                 const translatedTexts = await translateTexts(
                     textsToTranslate, 
                     sourceLang, 
@@ -94,6 +94,7 @@ async function handleStandardTranslation() {
                     document.getElementById('status-message').textContent = `Ошибка: Недействительный API ключ для ${getApiName(translationApi)}`;
                     document.getElementById('progress-bar').style.width = '100%';
                     document.getElementById('progress-bar').style.backgroundColor = 'var(--error-color)';
+                    
                     return;
                 }
                 
@@ -184,6 +185,9 @@ function extractTranslatableTexts(parsedFile) {
             break;
         case 'csv':
             ({ textsToTranslate, structure } = extractFromCSV(parsedFile.data));
+            break;
+        case 'md':
+            ({ textsToTranslate, structure } = extractFromMarkdown(parsedFile.data));
             break;
         default:
             ({ textsToTranslate, structure } = extractFromText(parsedFile.data));
@@ -279,6 +283,104 @@ function extractFromCSV(data) {
             }
         });
     });
+    
+    return { textsToTranslate, structure };
+}
+
+function extractFromMarkdown(lines) {
+    let textsToTranslate = [];
+    let structure = [];
+    
+    // Додаємо дебаг інформацію
+    console.log("Розпочинаємо обробку Markdown файлу, рядків:", lines.length);
+    
+    // Відстежуємо, чи ми знаходимося всередині блоку коду
+    let insideCodeBlock = false;
+    
+    lines.forEach((line, index) => {
+        console.log(`Обробка рядка ${index}:`, line);
+        
+        if (line && line.trim()) {
+            // Перевіряємо на початок або кінець блоку коду (```...)
+            if (/^```.*$/.test(line.trim())) {
+                console.log(`Рядок ${index} є початком або кінцем блоку коду Markdown`);
+                insideCodeBlock = !insideCodeBlock; // перемикаємо стан
+                textsToTranslate.push('');
+                structure.push({ 
+                    key: `${index}`, 
+                    type: 'md-code-block', 
+                    originalLine: line
+                });
+                return;
+            }
+            
+            // Якщо ми всередині блоку коду, не перекладаємо цей рядок
+            if (insideCodeBlock) {
+                console.log(`Рядок ${index} є частиною блоку коду, не перекладаємо`);
+                textsToTranslate.push('');
+                structure.push({ 
+                    key: `${index}`, 
+                    type: 'md-code-content', 
+                    originalLine: line
+                });
+                return;
+            }
+            
+            // Перевіряємо на MD заголовки (# Heading)
+            if (/^#{1,6}\s+.+/.test(line.trim())) {
+                console.log(`Рядок ${index} є Markdown заголовком`);
+                // Розділяємо на маркер заголовка і текст
+                const match = line.match(/^(#{1,6}\s+)(.+)$/);
+                if (match) {
+                    const headingMarker = match[1]; // частина з #
+                    const headingText = match[2]; // текст заголовка
+                    
+                    // Перекладаємо лише текст заголовка
+                    const { text, tags } = extractTags(headingText);
+                    textsToTranslate.push(text);
+                    structure.push({ 
+                        key: `${index}`, 
+                        type: 'md-heading', 
+                        headingMarker: headingMarker,
+                        tags: tags
+                    });
+                    return;
+                }
+            }
+            
+            // Перевіряємо на inline код (`code`)
+            let processedLine = line;
+            const inlineCodeTags = [];
+            let inlineCodeCount = 0;
+            
+            // Замінюємо inline код на плейсхолдери
+            processedLine = processedLine.replace(/`[^`]+`/g, (match) => {
+                const placeholder = `__MD_CODE_${inlineCodeCount}__`;
+                inlineCodeTags.push(match);
+                inlineCodeCount++;
+                return placeholder;
+            });
+            
+            // Обробляємо звичайний текст
+            const { text, tags } = extractTags(processedLine);
+            textsToTranslate.push(text);
+            
+            structure.push({ 
+                key: `${index}`, 
+                type: 'md-line', 
+                tags: tags,
+                inlineCodeTags: inlineCodeTags
+            });
+        } else {
+            // Порожній рядок
+            console.log(`Порожній рядок`);
+            textsToTranslate.push('');
+            structure.push({ key: `${index}`, type: 'empty' });
+        }
+    });
+    
+    console.log("Структура тексту після обробки:", structure);
+    console.log("Тексти для перекладу:", textsToTranslate);
     
     return { textsToTranslate, structure };
 }
@@ -499,12 +601,15 @@ async function translateTexts(texts, sourceLang, targetLang, currentFileNum, tot
     let translatedCount = 0;
     
     try {
+        // Оновлюємо статус з інформацією про поточний файл
+        statusElement.textContent = `Файл ${currentFileNum}/${totalFiles}: Підготовка до перекладу...`;
+        
         // Перекладаємо кожен непорожній текст окремо
         for (const index of nonEmptyIndices) {
             const textToTranslate = texts[index];
             
             // Оновлюємо статус
-            statusElement.textContent = `Переклад тексту (${translatedCount+1}/${totalTexts})...`;
+            statusElement.textContent = `Файл ${currentFileNum}/${totalFiles}: Переклад тексту (${translatedCount+1}/${totalTexts})...`;
             
             // Поновлюємо прогрес бар
             const percent = ((translatedCount / totalTexts) * 100);
@@ -534,7 +639,7 @@ async function translateTexts(texts, sourceLang, targetLang, currentFileNum, tot
                     error.message.includes('429')
                 )) {
                     // Показуємо повідомлення про ліміт
-                    limitMessage.textContent = 'Перевищено ліміт API. Очікуємо 1 хвилину...';
+                    limitMessage.textContent = 'Превышен лимит API. Ожидайте 1 минуту...';
                     limitMessage.style.display = 'block';
                     
                     // Чекаємо хвилину
@@ -859,6 +964,9 @@ function reconstructFile(translatedTexts, structure, parsedFile) {
         case 'csv':
             result = reconstructCSV(translatedTexts, structure, parsedFile.data);
             break;
+        case 'md':
+            result = reconstructMarkdown(translatedTexts, structure, parsedFile.data);
+            break;
         default:
             result = reconstructText(translatedTexts, structure);
     }
@@ -929,10 +1037,10 @@ function reconstructCSV(translatedTexts, structure, originalData) {
     return result.map(row => row.join(',')).join('\n');
 }
 
-function reconstructText(translatedTexts, structure) {
+function reconstructMarkdown(translatedTexts, structure, lines) {
     const result = [];
     
-    console.log("Початок реконструкції тексту...");
+    console.log("Початок реконструкції Markdown тексту...");
     
     structure.forEach((item, index) => {
         console.log(`Обробка елемента ${index}, тип: ${item.type}`);
@@ -940,34 +1048,26 @@ function reconstructText(translatedTexts, structure) {
         if (item.type === 'empty') {
             // Порожній рядок
             result.push('');
-        } else if (item.type === 'section-header') {
-            // Заголовок секції, не перекладається
+        } else if (item.type === 'md-heading') {
+            // Markdown заголовок
+            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+            result.push(`${item.headingMarker}${translatedText}`);
+        } else if (item.type === 'md-code-block' || item.type === 'md-code-content') {
+            // Блоки коду не перекладаються
             result.push(item.originalLine);
-        } else if (item.type === 'localization-key') {
-            // Локалізаційний ключ типу CIN_Intro_01="текст"
-            const translatedText = reinsertTags(translatedTexts[index], item.tags);
-            // Формуємо рядок з оригінальним ключем
-            result.push(`${item.locKey}="${translatedText}"`);
-        } else if (item.type === 'key-value-no-translate') {
-            // Ключ-значення, яке не потребує перекладу
-            if (item.hasQuotes) {
-                result.push(`${item.originalKey}${item.separator}"${item.originalValue}"`);
-            } else {
-                result.push(`${item.originalKey}${item.separator}${item.originalValue}`);
-            }
-        } else if (item.type === 'line') {
-            // Звичайний рядок тексту
-            const translatedText = reinsertTags(translatedTexts[index], item.tags);
-            result.push(translatedText);
-        } else if (item.type === 'key-value') {
-            // Звичайний ключ-значення
-            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+        } else if (item.type === 'md-line') {
+            // Звичайний рядок Markdown тексту
+            let translatedText = reinsertTags(translatedTexts[index], item.tags);
             
-            if (item.hasQuotes) {
-                result.push(`${item.originalKey}${item.separator}"${translatedText}"`);
-            } else {
-                result.push(`${item.originalKey}${item.separator}${translatedText}`);
+            // Відновлюємо inline код
+            if (item.inlineCodeTags && item.inlineCodeTags.length > 0) {
+                for (let i = 0; i < item.inlineCodeTags.length; i++) {
+                    const placeholder = `__MD_CODE_${i}__`;
+                    translatedText = translatedText.replace(placeholder, item.inlineCodeTags[i]);
+                }
             }
+            
+            result.push(translatedText);
         }
     });
     
@@ -1026,6 +1126,54 @@ function reinsertTags(translatedText, tags) {
     
     console.log("Фінальний текст з відновленими тегами:", result);
     return result;
+}
+
+function reconstructText(translatedTexts, structure) {
+    const result = [];
+    
+    console.log("Початок реконструкції тексту...");
+    
+    structure.forEach((item, index) => {
+        console.log(`Обробка елемента ${index}, тип: ${item.type}`);
+        
+        if (item.type === 'empty') {
+            // Порожній рядок
+            result.push('');
+        } else if (item.type === 'section-header') {
+            // Заголовок секції, не перекладається
+            result.push(item.originalLine);
+        } else if (item.type === 'localization-key') {
+            // Локалізаційний ключ типу CIN_Intro_01="текст"
+            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+            // Формуємо рядок з оригінальним ключем
+            result.push(`${item.locKey}="${translatedText}"`);
+        } else if (item.type === 'key-value-no-translate') {
+            // Ключ-значення, яке не потребує перекладу
+            if (item.hasQuotes) {
+                result.push(`${item.originalKey}${item.separator}"${item.originalValue}"`);
+            } else {
+                result.push(`${item.originalKey}${item.separator}${item.originalValue}`);
+            }
+        } else if (item.type === 'line') {
+            // Звичайний рядок тексту
+            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+            result.push(translatedText);
+        } else if (item.type === 'key-value') {
+            // Звичайний ключ-значення
+            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+            
+            if (item.hasQuotes) {
+                result.push(`${item.originalKey}${item.separator}"${translatedText}"`);
+            } else {
+                result.push(`${item.originalKey}${item.separator}${translatedText}`);
+            }
+        }
+    });
+    
+    const finalText = result.join('\n');
+    console.log("Фінальний текст після реконструкції:");
+    
+    return finalText;
 }
 
 // Функція для валідації API ключів різних сервісів
@@ -1111,4 +1259,15 @@ function adjustDeepLLanguageCode(langCode) {
     };
     
     return mappings[langCode] || langCode.toUpperCase();
+}
+
+// Оновлюємо функцію getFileType для підтримки .md
+function getFileType(file) {
+    const fileName = file.name.toLowerCase();
+    
+    if (fileName.endsWith('.json')) return 'json';
+    if (fileName.endsWith('.xml')) return 'xml';
+    if (fileName.endsWith('.csv')) return 'csv';
+    if (fileName.endsWith('.md')) return 'md'; // Додаємо підтримку Markdown
+    return 'txt'; // Default
 }

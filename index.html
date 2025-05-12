@@ -28,14 +28,7 @@
                         <p class="file-name" id="standard-file-name">Файлы не выбраны</p>
                     </div>
                     
-                    <div class="api-selector">
-                        <label for="translation-api">Сервис перевода:</label>
-                        <select id="translation-api">
-                            <option value="google">Google Translate API (100 запросов/мин)</option>
-                            <option value="deepl">DeepL API (60 запросов/мин)</option>
-                            <option value="microsoft">Microsoft Translator API (100 запросов/мин)</option>
-                        </select>
-                    </div>
+                    
                     
                     <div class="api-key-container">
                         <label for="api-key-standard">API ключ:</label>
@@ -46,7 +39,14 @@
                             Для Microsoft Translator API нужен ключ из Azure Portal.
                         </p>
                     </div>
-                    
+                    <div class="api-selector">
+                        <label for="translation-api">Сервис перевода:</label>
+                        <select id="translation-api">
+                            <option value="google">Google Translate API (100 запросов/мин)</option>
+                            <option value="deepl">DeepL API (60 запросов/мин)</option>
+                            <option value="microsoft">Microsoft Translator API (100 запросов/мин)</option>
+                        </select>
+                    </div>
                     <div class="language-selector">
                         <div>
                             <label for="source-lang">Исходный язык:</label>

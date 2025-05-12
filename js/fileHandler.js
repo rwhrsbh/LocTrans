@@ -71,6 +71,7 @@ function getFileType(file) {
     if (fileName.endsWith('.json')) return 'json';
     if (fileName.endsWith('.xml')) return 'xml';
     if (fileName.endsWith('.csv')) return 'csv';
+    if (fileName.endsWith('.md')) return 'md';
     return 'txt'; // Default
 }
 

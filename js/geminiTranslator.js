@@ -692,3 +692,192 @@ async function realGeminiAPICall(textBatch, prompt, apiKey, targetLang, model) {
         }
     }
 }
+
+// Функция для обработки Markdown файлов
+function extractFromMarkdown(lines) {
+    let textsToTranslate = [];
+    let structure = [];
+    
+    // Додаємо дебаг інформацію
+    console.log("Розпочинаємо обробку Markdown файлу, рядків:", lines.length);
+    
+    // Відстежуємо, чи ми знаходимося всередині блоку коду
+    let insideCodeBlock = false;
+    
+    lines.forEach((line, index) => {
+        console.log(`Обробка рядка ${index}:`, line);
+        
+        if (line && line.trim()) {
+            // Перевіряємо на початок або кінець блоку коду (```...)
+            if (/^```.*$/.test(line.trim())) {
+                console.log(`Рядок ${index} є початком або кінцем блоку коду Markdown`);
+                insideCodeBlock = !insideCodeBlock; // перемикаємо стан
+                textsToTranslate.push('');
+                structure.push({ 
+                    key: `${index}`, 
+                    type: 'md-code-block', 
+                    originalLine: line
+                });
+                return;
+            }
+            
+            // Якщо ми всередині блоку коду, не перекладаємо цей рядок
+            if (insideCodeBlock) {
+                console.log(`Рядок ${index} є частиною блоку коду, не перекладаємо`);
+                textsToTranslate.push('');
+                structure.push({ 
+                    key: `${index}`, 
+                    type: 'md-code-content', 
+                    originalLine: line
+                });
+                return;
+            }
+            
+            // Перевіряємо на MD заголовки (# Heading)
+            if (/^#{1,6}\s+.+/.test(line.trim())) {
+                console.log(`Рядок ${index} є Markdown заголовком`);
+                // Розділяємо на маркер заголовка і текст
+                const match = line.match(/^(#{1,6}\s+)(.+)$/);
+                if (match) {
+                    const headingMarker = match[1]; // частина з #
+                    const headingText = match[2]; // текст заголовка
+                    
+                    // Перекладаємо лише текст заголовка
+                    const { text, tags } = extractTags(headingText);
+                    textsToTranslate.push(text);
+                    structure.push({ 
+                        key: `${index}`, 
+                        type: 'md-heading', 
+                        headingMarker: headingMarker,
+                        tags: tags
+                    });
+                    return;
+                }
+            }
+            
+            // Перевіряємо на inline код (`code`)
+            let processedLine = line;
+            const inlineCodeTags = [];
+            let inlineCodeCount = 0;
+            
+            // Замінюємо inline код на плейсхолдери
+            processedLine = processedLine.replace(/`[^`]+`/g, (match) => {
+                const placeholder = `__MD_CODE_${inlineCodeCount}__`;
+                inlineCodeTags.push(match);
+                inlineCodeCount++;
+                return placeholder;
+            });
+            
+            // Обробляємо звичайний текст
+            const { text, tags } = extractTags(processedLine);
+            textsToTranslate.push(text);
+            
+            structure.push({ 
+                key: `${index}`, 
+                type: 'md-line', 
+                tags: tags,
+                inlineCodeTags: inlineCodeTags
+            });
+        } else {
+            // Порожній рядок
+            console.log(`Порожній рядок`);
+            textsToTranslate.push('');
+            structure.push({ key: `${index}`, type: 'empty' });
+        }
+    });
+    
+    console.log("Структура тексту після обробки:", structure);
+    console.log("Тексти для перекладу:", textsToTranslate);
+    
+    return { textsToTranslate, structure };
+}
+
+// Додаємо підтримку MD до функції reconstructFile
+function reconstructFile(translatedTexts, structure, parsedFile) {
+    let translatedContent;
+    
+    switch (parsedFile.type) {
+        case 'json':
+            translatedContent = reconstructJSON(translatedTexts, structure, parsedFile.data);
+            break;
+        case 'xml':
+            translatedContent = reconstructXML(translatedTexts, structure, parsedFile.data);
+            break;
+        case 'csv':
+            translatedContent = reconstructCSV(translatedTexts, structure, parsedFile.data);
+            break;
+        case 'md':
+            translatedContent = reconstructMarkdown(translatedTexts, structure, parsedFile.data);
+            break;
+        default:
+            translatedContent = reconstructText(translatedTexts, structure);
+    }
+    
+    return translatedContent;
+}
+
+// Додаємо функцію для реконструкції MD файлів
+function reconstructMarkdown(translatedTexts, structure) {
+    const result = [];
+    
+    console.log("Початок реконструкції Markdown тексту...");
+    
+    structure.forEach((item, index) => {
+        console.log(`Обробка елемента ${index}, тип: ${item.type}`);
+        
+        if (item.type === 'empty') {
+            // Порожній рядок
+            result.push('');
+        } else if (item.type === 'md-heading') {
+            // Markdown заголовок
+            const translatedText = reinsertTags(translatedTexts[index], item.tags);
+            result.push(`${item.headingMarker}${translatedText}`);
+        } else if (item.type === 'md-code-block' || item.type === 'md-code-content') {
+            // Блоки коду не перекладаються
+            result.push(item.originalLine);
+        } else if (item.type === 'md-line') {
+            // Звичайний рядок Markdown тексту
+            let translatedText = reinsertTags(translatedTexts[index], item.tags);
+            
+            // Відновлюємо inline код
+            if (item.inlineCodeTags && item.inlineCodeTags.length > 0) {
+                for (let i = 0; i < item.inlineCodeTags.length; i++) {
+                    const placeholder = `__MD_CODE_${i}__`;
+                    translatedText = translatedText.replace(placeholder, item.inlineCodeTags[i]);
+                }
+            }
+            
+            result.push(translatedText);
+        }
+    });
+    
+    const finalText = result.join('\n');
+    console.log("Фінальний текст після реконструкції:");
+    
+    return finalText;
+}
+
+// Перед функцією extractFromMarkdown 
+function extractTranslatableTexts(parsedFile) {
+    let textsToTranslate = [];
+    let structure = [];
+    
+    switch (parsedFile.type) {
+        case 'json':
+            ({ textsToTranslate, structure } = extractFromJSON(parsedFile.data));
+            break;
+        case 'xml':
+            ({ textsToTranslate, structure } = extractFromXML(parsedFile.data));
+            break;
+        case 'csv':
+            ({ textsToTranslate, structure } = extractFromCSV(parsedFile.data));
+            break;
+        case 'md':
+            ({ textsToTranslate, structure } = extractFromMarkdown(parsedFile.data));
+            break;
+        default:
+            ({ textsToTranslate, structure } = extractFromText(parsedFile.data));
+    }
+    
+    return { textsToTranslate, structure };
+}
