@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Localization Translator</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="img/image.png">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Переводчик файлов локализации</h1>
+        </header>
+        
+        <main>
+            <div class="tab-container">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="standard">Стандартный перевод</button>
+                    <button class="tab-btn" data-tab="gemini">Gemini AI</button>
+                </div>
+                
+                <div class="tab-content active" id="standard">
+                    <p>Загрузите файлы локализации для перевода через стандартный переводчик</p>
+                    <div class="upload-container">
+                        <label for="standard-file">Выбрать файлы</label>
+                        <input type="file" id="standard-file" multiple>
+                        <p class="file-name" id="standard-file-name">Файлы не выбраны</p>
+                    </div>
+                    
+                    <div class="api-selector">
+                        <label for="translation-api">Сервис перевода:</label>
+                        <select id="translation-api">
+                            <option value="google">Google Translate API (100 запросов/мин)</option>
+                            <option value="deepl">DeepL API (60 запросов/мин)</option>
+                            <option value="microsoft">Microsoft Translator API (100 запросов/мин)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="api-key-container">
+                        <label for="api-key-standard">API ключ:</label>
+                        <input type="password" id="api-key-standard" placeholder="Введите ваш API ключ для выбранного сервиса">
+                        <p class="api-key-info" id="api-key-info">
+                            Для Google Translate API нужен ключ из Google Cloud Console.<br>
+                            Для DeepL API ключ можно получить в DeepL Developer Dashboard.<br>
+                            Для Microsoft Translator API нужен ключ из Azure Portal.
+                        </p>
+                    </div>
+                    
+                    <div class="language-selector">
+                        <div>
+                            <label for="source-lang">Исходный язык:</label>
+                            <select id="source-lang"></select>
+                        </div>
+                        <div>
+                            <label for="target-lang">Целевой язык:</label>
+                            <select id="target-lang"></select>
+                        </div>
+                    </div>
+                    
+                    <button id="translate-btn" class="action-btn" disabled>Перевести</button>
+                </div>
+                
+                <div class="tab-content" id="gemini">
+                    <p>Загрузите файлы локализации для перевода через Gemini AI</p>
+                    <div class="upload-container">
+                        <label for="gemini-file">Выбрать файлы</label>
+                        <input type="file" id="gemini-file" multiple>
+                        <p class="file-name" id="gemini-file-name">Файлы не выбраны</p>
+                    </div>
+                    
+                    <div class="api-key-container">
+                        <label for="api-key">API ключ Gemini:</label>
+                        <input type="password" id="api-key" placeholder="Введите ваш API ключ Gemini">
+                    </div>
+                    
+                    <div class="model-selector">
+                        <label for="gemini-model">Модель Gemini:</label>
+                        <select id="gemini-model">
+                            <option value="gemini-2.5-flash-preview-04-17">gemini-2.5-flash-preview-04-17 (30 запросов/мин)</option>
+                            <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (20 запросов/мин)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="thinking-option" id="thinking-option-container">
+                        <input type="checkbox" id="enable-thinking" checked>
+                        <label for="enable-thinking">Включить синкинг (thinking) для Gemini 2.5 Flash</label>
+                    </div>
+                    
+                    <div class="language-selector">
+                        <div>
+                            <label for="gemini-source-lang">Исходный язык:</label>
+                            <select id="gemini-source-lang"></select>
+                        </div>
+                        <div>
+                            <label for="gemini-target-lang">Целевой язык:</label>
+                            <select id="gemini-target-lang"></select>
+                        </div>
+                    </div>
+                    
+                    <div class="word-limit-info">
+                        <p>Лимит слов для Gemini API: <span id="word-limit-counter">0</span>/1,000,000</p>
+                    </div>
+                    
+                    <button id="gemini-translate-btn" class="action-btn" disabled>Перевести через Gemini</button>
+                </div>
+            </div>
+            
+            <div class="result-container hidden" id="result-container">
+                <h2>Результат перевода</h2>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <p id="status-message">Обработка...</p>
+                <div class="download-container hidden" id="download-container">
+                    <button id="download-btn" class="action-btn">Скачать ZIP-архив с переводами</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>© 2025 Game Localization Translator</p>
+        </footer>
+    </div>
+    
+    <script src="js/fileHandler.js"></script>
+    <script src="js/translator.js"></script>
+    <script src="js/geminiTranslator.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
